@@ -61,33 +61,49 @@ class RegisterController extends Controller
     /** insert new users */
     public function storeUser(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name'      => 'required|string|max:255',
             'email'     => 'required|string|email|max:255|unique:users',
             'password'  => 'required|string|min:8|confirmed',
             'password_confirmation' => 'required',
         ]);
-        try {
-            $dt        = Carbon::now();
-            $todayDate = $dt->toDayDateTimeString();
-            
-            $register            = new User;
-            $register->name      = $request->name;
-            $register->email     = $request->email;
-            $register->join_date = $todayDate;
-            $register->role_name = 'User Normal';
-            $register->status    = 'Active';
-            $register->password  = Hash::make($request->password);
-            $register->save();
 
-            Toastr::success('Create new account successfully :)','Success');
-            return redirect('login');
-        } catch(\Exception $e) {
-            \Log::info($e);
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation errors',
+                'errors'  => $validator->errors()
+            ], 422);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            $user = User::create([
+                'name'      => $request->name,
+                'email'     => $request->email,
+                'join_date' => Carbon::now()->toDayDateTimeString(),
+                'role_name' => 'User Normal',
+                'status'    => 'Active',
+                'password'  => Hash::make($request->password),
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'User registered successfully',
+                'data'    => $user
+            ], 201);
+        } catch (\Exception $e) {
             DB::rollback();
-            Toastr::error('Add new employee fail :)','Error');
-            return redirect()->back();
+            \Log::error('User Registration Error: ' . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Something went wrong while registering user',
+                'error'   => $e->getMessage()
+            ], 500);
         }
     }
-
 }
